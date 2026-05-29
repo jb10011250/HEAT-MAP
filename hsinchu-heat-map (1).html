@@ -6,7 +6,10 @@
 <title>熱危害監測</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+TC:wght@300;400;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
 <style>
   :root {
     --bg:      #0d0f14;
@@ -150,13 +153,16 @@
     100% { box-shadow:0 0 0 0 #3b82f600; }
   }
 
+  .station-popup .leaflet-popup-content, .custom-popup .leaflet-popup-content { margin: 8px; line-height: 1.3; }
+  .station-popup .leaflet-popup-content { zoom: 0.85; }
+
   @media (max-width:640px) {
-    .sidebar { width:100%; height:320px; border-right:none; border-bottom:1px solid var(--border); overflow-y:auto; }
+    .sidebar { width:100%; height:50vh; border-right:none; border-bottom:1px solid var(--border); overflow-y:auto; }
     .sidebar::-webkit-scrollbar { width:4px; }
     .sidebar::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
     .station-list { overflow-y:visible; flex:none; }
     .main { flex-direction:column; }
-    #map { flex:1; min-height:0; }
+    #map { flex:1; min-height:50vh; }
   }
 </style>
 </head>
@@ -169,10 +175,8 @@
   <div class="logo-mark">熱</div>
   <div class="header-title">
     <h1>熱危害監測</h1>
-    <p>TAIWAN · HEAT INDEX DASHBOARD</p>
   </div>
   <div class="header-spacer"></div>
-  <span id="clock"></span>
   <button id="btn-cool" class="layer-btn" onclick="toggleCoolLayer()">🏢 涼適點</button>
   <button id="btn-water" class="layer-btn water" onclick="toggleWaterLayer()">💧 飲水機</button>
   <button id="refresh-btn" onclick="fetchData()">↻ 更新</button>
@@ -387,7 +391,7 @@ async function toggleCoolLayer() {
     if (!coolLayerGroup) {
       const res = await fetch(URL_COOL);
       const data = await res.json();
-      coolLayerGroup = L.layerGroup();
+      coolLayerGroup = L.markerClusterGroup({ disableClusteringAtZoom: 16, maxClusterRadius: 60 });
       data.forEach(p => {
         if (!p.Latitude || !p.Longitude) return;
         const emoji = p.CoolingType === '室內涼爽點' ? '🏢' : '☂️';
@@ -426,7 +430,7 @@ async function toggleWaterLayer() {
     if (!waterLayerGroup) {
       const res = await fetch(URL_WATER);
       const data = await res.json();
-      waterLayerGroup = L.layerGroup();
+      waterLayerGroup = L.markerClusterGroup({ disableClusteringAtZoom: 16, maxClusterRadius: 60 });
       data.forEach(p => {
         if (!p.Latitude || !p.Longitude) return;
         const popup = `<div style="font-size:12px;font-weight:700;color:#fff;margin-bottom:4px">${p.Name || '公共飲水機'}</div>
@@ -532,7 +536,7 @@ function renderStations() {
     } else {
       const m = L.marker([s.lat, s.lng], { icon:createMarkerIcon(s.hi) })
         .addTo(map)
-        .bindPopup(buildPopup(s), { maxWidth:240 });
+        .bindPopup(buildPopup(s), { maxWidth:240, className:'station-popup' });
       m.on('click', () => selectStation(s.id));
       stationMarkers[s.id] = m;
     }
@@ -701,22 +705,18 @@ function getLocation() {
   );
 }
 
-function updateClock() {
-  document.getElementById('clock').textContent =
-    new Date().toLocaleString('zh-TW',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
-}
-
 function showToast(msg) {
   const el = document.getElementById('toast');
   el.textContent = msg; el.classList.add('show');
   setTimeout(() => el.classList.remove('show'), 3000);
 }
 
-setInterval(updateClock, 1000); updateClock();
 setInterval(fetchData, 10*60*1000);
 
 initMap();
-fetchData();
+fetchData().then(() => {
+  toggleWaterLayer();
+});
 getLocation();
 </script>
 </body>
