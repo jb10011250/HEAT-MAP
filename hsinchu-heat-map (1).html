@@ -192,7 +192,7 @@
         <div class="loc-meta" id="my-loc-meta">—</div>
         <div class="hi-display">
           <span class="hi-value" id="my-hi">—</span>
-          <span class="hi-unit">體感°C</span>
+          <span class="hi-unit">熱指數</span>
         </div>
         <span class="hi-label" id="my-hi-label">—</span>
         <div class="temp-rh-row">
@@ -209,7 +209,7 @@
           <div class="legend-dot" style="background:#3CFF00"></div>
           <div style="flex:1">
             <div class="legend-name" style="color:#3CFF00">注意</div>
-            <div class="legend-range">&lt; 32.2°C</div>
+            <div class="legend-range">&lt; 32.2</div>
           </div>
           <div class="legend-badge" style="color:#3CFF00; font-weight:bold;">第一級</div>
         </div>
@@ -217,7 +217,7 @@
           <div class="legend-dot" style="background:#facc15"></div>
           <div style="flex:1">
             <div class="legend-name" style="color:#facc15">警戒</div>
-            <div class="legend-range">32.2 – 40.6°C</div>
+            <div class="legend-range">32.2 – 40.6</div>
           </div>
           <div class="legend-badge" style="color:#facc15; font-weight:bold;">第二級</div>
         </div>
@@ -225,7 +225,7 @@
           <div class="legend-dot" style="background:#f97316"></div>
           <div style="flex:1">
             <div class="legend-name" style="color:#f97316">高度警戒</div>
-            <div class="legend-range">40.6 – 54.4°C</div>
+            <div class="legend-range">40.6 – 54.4</div>
           </div>
           <div class="legend-badge" style="color:#f97316; font-weight:bold;">第三級</div>
         </div>
@@ -233,7 +233,7 @@
           <div class="legend-dot" style="background:#ef4444"></div>
           <div style="flex:1">
             <div class="legend-name" style="color:#ef4444">危險</div>
-            <div class="legend-range">&ge; 54.4°C</div>
+            <div class="legend-range">&ge; 54.4</div>
           </div>
           <div class="legend-badge" style="color:#ef4444; font-weight:bold;">第四級</div>
         </div>
@@ -473,7 +473,7 @@ function buildPopup(s) {
   const lv = getLevel(s.hi);
   const tStr = s.temp > -50 ? s.temp.toFixed(1) : '--';
   const rStr = s.rh >= 0 ? s.rh.toFixed(0) : '--';
-  const hiStr = isNaN(s.hi) ? '--' : s.hi.toFixed(1) + '°C';
+  const hiStr = isNaN(s.hi) ? '--' : s.hi.toFixed(1);
 
   // 日極列（每個測站都顯示，尤其對故障站有用）
   const hasHigh = !isNaN(s.dailyHigh) && s.dailyHigh > -50;
