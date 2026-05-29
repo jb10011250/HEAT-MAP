@@ -166,7 +166,7 @@
   .modal-close:hover { color:#fff; }
 
   @media (max-width:768px) {
-    .sidebar { width:100%; flex:none; height:auto; border-right:none; border-bottom:1px solid var(--border); overflow-y:visible; }
+    .sidebar { width:100%; flex:0 0 40%; border-right:none; border-bottom:1px solid var(--border); overflow-y:auto; }
     .main { flex-direction:column; }
     #map { flex:1; height:auto; min-height:0; }
   }
@@ -179,9 +179,6 @@
 
 <header>
   <div class="logo-mark">熱</div>
-  <div class="header-title">
-    <h1>熱危害監測</h1>
-  </div>
   <div class="header-spacer"></div>
   <button class="layer-btn" onclick="toggleStationModal()" style="border-color:var(--accent);color:var(--accent);background:#f5a62318;">📋 測站列表</button>
   <button id="btn-cool" class="layer-btn" onclick="toggleCoolLayer()">🏢 涼適點</button>
