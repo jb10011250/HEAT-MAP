@@ -210,10 +210,18 @@
       <div class="section-label">熱指數分級</div>
       <div class="legend-grid">
         <div class="legend-row">
+          <div class="legend-dot" style="background:#38bdf8"></div>
+          <div style="flex:1">
+            <div class="legend-name" style="color:#38bdf8">熱指數低</div>
+            <div class="legend-range">&lt; 26.7</div>
+          </div>
+          <div class="legend-badge" style="color:#38bdf8; font-weight:bold;">第零級</div>
+        </div>
+        <div class="legend-row">
           <div class="legend-dot" style="background:#3CFF00"></div>
           <div style="flex:1">
             <div class="legend-name" style="color:#3CFF00">注意</div>
-            <div class="legend-range">&lt; 32.2</div>
+            <div class="legend-range">26.7 – 32.2</div>
           </div>
           <div class="legend-badge" style="color:#3CFF00; font-weight:bold;">第一級</div>
         </div>
@@ -323,6 +331,8 @@ const HI_TABLE = [
  * 若超出表格範圍或落在 null 區域，退而使用 Rothfusz 公式補估
  */
 function lookupHI(T, RH) {
+  // 若氣溫低於表格最低列（26.7°C），直接回傳實際氣溫，不做插値
+  if (T < HI_TEMPS[0]) return T;
   // 找溫度區間
   let ti = HI_TEMPS.findIndex(t => t > T) - 1;
   if (ti < 0) ti = 0;
@@ -366,11 +376,12 @@ function rothfusz(T, RH) {
 
 // 分級（勞動部四級）
 function getLevel(hi) {
-  if (isNaN(hi)) return { rank:0, badge:'無資料', name:'儀器異常', color:'#7dd3fc', bg:'#7dd3fc22' };
+  if (isNaN(hi)) return { rank:-1, badge:'無資料', name:'儀器異常', color:'#7dd3fc', bg:'#7dd3fc22' };
   if (hi >= 54.4) return { rank:4, badge:'第四級', name:'危險',    color:'#ef4444', bg:'#ef444422' };
   if (hi >= 40.6) return { rank:3, badge:'第三級', name:'高度警戒', color:'#f97316', bg:'#f9731622' };
   if (hi >= 32.2) return { rank:2, badge:'第二級', name:'警戒',    color:'#facc15', bg:'#facc1522' };
-  return               { rank:1, badge:'第一級', name:'注意',    color:'#3CFF00', bg:'#3CFF0022' };
+  if (hi >= 26.7) return { rank:1, badge:'第一級', name:'注意',    color:'#3CFF00', bg:'#3CFF0022' };
+  return               { rank:0, badge:'第零級', name:'熱指數低', color:'#38bdf8', bg:'#38bdf822' };
 }
 
 // 地圖初始化
@@ -470,7 +481,7 @@ function createMarkerIcon(hi, size=36) {
       fill="${lv.color}22" stroke="${lv.color}" stroke-width="1.5"/>
     <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle"
       font-family="IBM Plex Mono,monospace" font-size="${fontSize}px"
-      font-weight="600" fill="${lv.color}">${label}</text>
+      font-weight="600" fill="${isNaN(hi) ? '#fff' : lv.color}">${label}</text>
   </svg>`;
   return L.divIcon({
     html: svg, className:'',
@@ -567,7 +578,9 @@ function renderList() {
     if (isNaN(b.hi)) return -1;
     return b.hi - a.hi;
   });
-  const listHtml = sorted.map(s => {
+  const MAX_DISPLAY = 200;
+  const display = sorted.slice(0, MAX_DISPLAY);
+  const listHtml = display.map(s => {
     const lv = getLevel(s.hi);
     const tStr = s.temp > -50 ? s.temp.toFixed(1) + '°C' : '--';
     const rStr = s.rh >= 0 ? s.rh.toFixed(0) + '%RH' : '--';
@@ -586,13 +599,18 @@ function renderList() {
       </div>`;
   }).join('');
   
-  document.getElementById('station-list').innerHTML = listHtml || '<div style="color:var(--muted);font-size:11px;text-align:center;padding:20px;font-family:var(--mono)">此範圍內無測站</div>';
+  const footer = sorted.length > MAX_DISPLAY
+    ? `<div style="color:var(--muted);font-size:10px;text-align:center;padding:8px 4px;font-family:var(--mono)">僅顯示熱指數最高的前 ${MAX_DISPLAY} 個測站</div>`
+    : '';
+  document.getElementById('station-list').innerHTML = (listHtml || '<div style="color:var(--muted);font-size:11px;text-align:center;padding:20px;font-family:var(--mono)">此範圍內無測站</div>') + footer;
 }
 
 function selectStation(id) {
   selectedId = id;
   const s = stations.find(x => x.id === id);
   if (!s) return;
+  // 關閉測站 Modal，讓使用者看到地圖彈出視窗
+  document.getElementById('station-modal').classList.remove('show');
   map.setView([s.lat, s.lng], 13, { animate:true });
   stationMarkers[id]?.openPopup();
   document.querySelectorAll('.station-item').forEach(el => el.classList.remove('active'));
@@ -622,7 +640,7 @@ function updateMyLocation(lat, lng) {
   if (nearest) {
     const lv = getLevel(nearest.hi);
     document.getElementById('my-loc-name').textContent = `最近測站：${nearest.name}`;
-    document.getElementById('my-loc-meta').textContent = `距離 ${minD.toFixed(1)} km`;
+    document.getElementById('my-loc-meta').textContent = `距離 ${minD.toFixed(1)} km・觀測 ${nearest.time}`;
     document.getElementById('my-hi').textContent = isNaN(nearest.hi) ? '--' : nearest.hi.toFixed(1);
     document.getElementById('my-hi').style.color = lv.color;
     const lb = document.getElementById('my-hi-label');
@@ -722,7 +740,7 @@ function getLocation() {
         document.getElementById('my-loc-meta').textContent = '可點選地圖測站查看';
       }
     },
-    { enableHighAccuracy:true, timeout:10000, maximumAge:0 }
+    { enableHighAccuracy:true, timeout:30000, maximumAge:5000 }
   );
 }
 
@@ -736,12 +754,13 @@ function showToast(msg) {
   setTimeout(() => el.classList.remove('show'), 3000);
 }
 
-setInterval(fetchData, 10*60*1000);
+// 頁面在前台時才更新，避免背景白打 API
+setInterval(() => { if (!document.hidden) fetchData(); }, 10*60*1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) fetchData(); });
 
 initMap();
-fetchData().then(() => {
-  toggleWaterLayer();
-});
+fetchData();        // 氣象資料與飲水機資料并行載入，互不相依
+toggleWaterLayer();
 getLocation();
 </script>
 </body>
