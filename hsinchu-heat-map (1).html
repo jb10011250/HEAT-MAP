@@ -259,8 +259,8 @@
 const _0xkey = atob('QTAzNkNFOUNENDhCLTBBNzktQjY0NC1FNjEzLUFBMERDODFELUFXQw==').split('').reverse().join('');
 const URL_AUTO = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001?Authorization=${_0xkey}&format=JSON`;
 const URL_BUREAU = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001?Authorization=${_0xkey}&format=JSON`;
-const URL_COOL = 'https://taiwancoolmap.moenv.gov.tw/CoolMap/Service/ajax_AllPoint';
-const URL_WATER = 'https://taiwancoolmap.moenv.gov.tw/CoolMap/Service/ajax_WaterDispenser';
+const URL_COOL  = 'coolmap_allpoint.json';
+const URL_WATER = 'coolmap_water.json';
 
 let coolLayerGroup = null, waterLayerGroup = null;
 let coolLayerOn = false, waterLayerOn = false;
@@ -385,7 +385,7 @@ async function toggleCoolLayer() {
   btn.textContent = '🏢 載入中…'; btn.disabled = true;
   try {
     if (!coolLayerGroup) {
-      const res = await fetch(URL_COOL, { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
+      const res = await fetch(URL_COOL);
       const data = await res.json();
       coolLayerGroup = L.layerGroup();
       data.forEach(p => {
@@ -424,7 +424,7 @@ async function toggleWaterLayer() {
   btn.textContent = '💧 載入中…'; btn.disabled = true;
   try {
     if (!waterLayerGroup) {
-      const res = await fetch(URL_WATER, { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
+      const res = await fetch(URL_WATER);
       const data = await res.json();
       waterLayerGroup = L.layerGroup();
       data.forEach(p => {
