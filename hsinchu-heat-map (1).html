@@ -156,13 +156,13 @@
   .station-popup .leaflet-popup-content, .custom-popup .leaflet-popup-content { margin: 8px; line-height: 1.3; }
   .station-popup .leaflet-popup-content { zoom: 0.85; }
 
-  @media (max-width:640px) {
-    .sidebar { width:100%; height:50vh; border-right:none; border-bottom:1px solid var(--border); overflow-y:auto; }
+  @media (max-width:768px) {
+    .sidebar { width:100%; flex:1; height:auto; border-right:none; border-bottom:1px solid var(--border); overflow-y:auto; }
     .sidebar::-webkit-scrollbar { width:4px; }
     .sidebar::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
     .station-list { overflow-y:visible; flex:none; }
     .main { flex-direction:column; }
-    #map { flex:1; min-height:50vh; }
+    #map { flex:1; height:auto; min-height:0; }
   }
 </style>
 </head>
