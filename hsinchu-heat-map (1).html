@@ -1,0 +1,633 @@
+﻿<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>熱危害監測</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+TC:wght@300;400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --bg:      #0d0f14;
+    --surface: #161a23;
+    --panel:   #1c2130;
+    --border:  #2a3040;
+    --text:    #c8d0e0;
+    --muted:   #5a6478;
+    --accent:  #f5a623;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'Noto Sans TC', sans-serif;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:var(--sans);
+         height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
+
+  /* Header */
+  header { display:flex; align-items:center; gap:16px; padding:10px 20px;
+           background:var(--surface); border-bottom:1px solid var(--border);
+           flex-shrink:0; z-index:1000; }
+  .logo-mark { width:36px; height:36px; background:var(--accent);
+    clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--mono); font-size:13px; font-weight:600; color:#000; flex-shrink:0; }
+  .header-title h1 { font-size:15px; font-weight:700; letter-spacing:.05em; color:#fff; }
+  .header-title p  { font-size:11px; color:var(--muted); font-family:var(--mono); margin-top:1px; }
+  .header-spacer { flex:1; }
+  #clock { font-family:var(--mono); font-size:12px; color:var(--muted); }
+  #refresh-btn { background:var(--panel); border:1px solid var(--border); color:var(--text);
+    padding:6px 14px; border-radius:4px; cursor:pointer; font-family:var(--mono);
+    font-size:11px; transition:all .2s; }
+  #refresh-btn:hover { border-color:var(--accent); color:var(--accent); }
+  #refresh-btn.loading { opacity:.5; pointer-events:none; }
+
+  /* Layout */
+  .main { display:flex; flex:1; overflow:hidden; }
+
+  /* Sidebar */
+  .sidebar { width:300px; flex-shrink:0; background:var(--surface);
+             border-right:1px solid var(--border); display:flex;
+             flex-direction:column; overflow:hidden; }
+  .sidebar-section { padding:10px 14px; border-bottom:1px solid var(--border); flex-shrink:0; }
+  .section-label { font-family:var(--mono); font-size:10px; letter-spacing:.12em;
+                   color:var(--muted); text-transform:uppercase; margin-bottom:6px; flex-shrink:0; }
+
+  /* My location */
+  #my-location-card { background:var(--panel); border:1px solid var(--border);
+                      border-radius:6px; padding:10px; }
+  #my-location-card.locating { border-color:var(--accent); }
+  .loc-name { font-size:13px; font-weight:700; color:#fff; }
+  .loc-meta { font-family:var(--mono); font-size:10px; color:var(--muted); margin-top:3px; }
+  .hi-display { display:flex; align-items:baseline; gap:8px; margin-top:6px; }
+  .hi-value { font-family:var(--mono); font-size:40px; font-weight:600; line-height:1; color:var(--accent); }
+  .hi-unit  { font-size:12px; color:var(--muted); }
+  .hi-label { font-size:11px; font-weight:700; padding:2px 8px; border-radius:3px;
+              letter-spacing:.06em; display:inline-block; margin-top:6px; }
+  .temp-rh-row { display:flex; gap:8px; margin-top:6px; }
+  .metric-box { flex:1; background:var(--bg); border-radius:4px; padding:8px; text-align:center; }
+  .metric-box .mv { font-family:var(--mono); font-size:18px; font-weight:600; color:#fff; }
+  .metric-box .ml { font-size:10px; color:var(--muted); margin-top:2px; }
+
+  /* Legend */
+  .legend-grid { display:flex; flex-direction:column; gap:4px; }
+  .legend-row { display:flex; align-items:center; gap:10px; padding:5px 10px;
+                border-radius:4px; background:var(--panel); border:1px solid var(--border); }
+  .legend-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .legend-range { font-family:var(--mono); font-size:10px; color:var(--muted); flex:1; }
+  .legend-name { font-size:11px; font-weight:700; }
+  .legend-badge { font-family:var(--mono); font-size:9px; color:var(--muted); }
+  .legend-source { font-size:9px; color:var(--muted); font-family:var(--mono);
+                   padding:4px 2px; line-height:1.6; margin-top:4px; }
+
+  /* Station list */
+  .station-list { flex:1; overflow-y:auto; padding:8px; min-height:30vh; }
+  .station-list::-webkit-scrollbar { width:4px; }
+  .station-list::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+  .station-item { display:flex; align-items:center; gap:10px; padding:8px 10px;
+                  border-radius:5px; margin-bottom:4px; cursor:pointer;
+                  transition:background .15s; border:1px solid transparent; }
+  .station-item:hover { background:var(--panel); border-color:var(--border); }
+  .station-item.active { background:var(--panel); border-color:var(--accent); }
+  .station-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .station-name { font-size:12px; font-weight:700; flex:1; color:#fff; }
+  .station-hi { font-family:var(--mono); font-size:13px; font-weight:600; }
+  .station-sub { font-size:10px; color:var(--muted); margin-top:1px; }
+
+  .list-toggle { display:flex; background:var(--bg); border-radius:4px; overflow:hidden; border:1px solid var(--border); }
+  .list-toggle button { background:transparent; border:none; color:var(--muted); font-size:10px; padding:4px 8px; cursor:pointer; font-family:var(--sans); }
+  .list-toggle button.active { background:var(--panel); color:var(--accent); font-weight:700; }
+
+  /* Map */
+  #map { flex:1; background:var(--bg); }
+  .leaflet-container { background:#111318; }
+  .leaflet-tile { filter:brightness(.75) saturate(.6) hue-rotate(190deg); }
+  .leaflet-control-zoom a { background:var(--surface)!important; color:var(--text)!important;
+                            border-color:var(--border)!important; }
+  .leaflet-control-attribution { background:#0009!important; color:var(--muted)!important; font-size:9px!important; }
+  .leaflet-popup-content-wrapper { background:var(--surface); color:var(--text);
+    border:1px solid var(--border); border-radius:6px; box-shadow:0 8px 32px #0008; }
+  .leaflet-popup-tip { background:var(--surface); }
+  .leaflet-popup-content { margin:12px 16px; }
+  .popup-name { font-size:13px; font-weight:700; color:#fff; margin-bottom:8px; }
+  .popup-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .popup-cell { background:var(--panel); border-radius:4px; padding:6px 8px; }
+  .popup-val { font-family:var(--mono); font-size:16px; font-weight:600; }
+  .popup-key { font-size:9px; color:var(--muted); margin-top:2px; letter-spacing:.08em; }
+  .popup-hi-row { margin-top:8px; padding:8px 10px; border-radius:4px;
+                  display:flex; align-items:center; justify-content:space-between; }
+  .popup-hi-badge { font-size:10px; font-weight:700; letter-spacing:.06em; }
+  .popup-hi-name  { font-size:12px; font-weight:900; margin-top:2px; }
+  .popup-hi-val   { font-family:var(--mono); font-size:22px; font-weight:600; }
+
+  /* Loading */
+  #loading { position:fixed; inset:0; background:var(--bg);
+             display:flex; flex-direction:column; align-items:center; justify-content:center;
+             z-index:9999; transition:opacity .4s; }
+  #loading.done { opacity:0; pointer-events:none; }
+  .spinner { width:48px; height:48px; border:3px solid var(--border); border-top-color:var(--accent);
+             border-radius:50%; animation:spin 1s linear infinite; margin-bottom:20px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  #loading p { font-family:var(--mono); font-size:12px; color:var(--muted); }
+
+  /* Toast */
+  #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+           background:var(--panel); border:1px solid var(--border); padding:8px 20px;
+           border-radius:20px; font-family:var(--mono); font-size:11px; color:var(--text);
+           z-index:8000; opacity:0; transition:opacity .3s; pointer-events:none; }
+  #toast.show { opacity:1; }
+
+  /* User location */
+  .user-dot { width:16px; height:16px; background:#3b82f6; border:3px solid #fff;
+              border-radius:50%; animation:pulse-ring 2s infinite; }
+  @keyframes pulse-ring {
+    0%   { box-shadow:0 0 0 0 #3b82f660; }
+    70%  { box-shadow:0 0 0 14px #3b82f600; }
+    100% { box-shadow:0 0 0 0 #3b82f600; }
+  }
+
+  @media (max-width:640px) {
+    .sidebar { width:100%; height:320px; border-right:none; border-bottom:1px solid var(--border); overflow-y:auto; }
+    .sidebar::-webkit-scrollbar { width:4px; }
+    .sidebar::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+    .station-list { overflow-y:visible; flex:none; }
+    .main { flex-direction:column; }
+    #map { flex:1; min-height:0; }
+  }
+</style>
+</head>
+<body>
+
+<div id="loading"><div class="spinner"></div><p id="loading-msg">正在取得氣象資料…</p></div>
+<div id="toast"></div>
+
+<header>
+  <div class="logo-mark">熱</div>
+  <div class="header-title">
+    <h1>熱危害監測</h1>
+    <p>TAIWAN · HEAT INDEX DASHBOARD</p>
+  </div>
+  <div class="header-spacer"></div>
+  <span id="clock"></span>
+  <button id="refresh-btn" onclick="fetchData()">↻ 更新</button>
+</header>
+
+<div class="main">
+  <div class="sidebar">
+
+    <div class="sidebar-section">
+      <div class="section-label">📍 我的位置</div>
+      <div id="my-location-card" class="locating">
+        <div class="loc-name" id="my-loc-name">定位中…</div>
+        <div class="loc-meta" id="my-loc-meta">—</div>
+        <div class="hi-display">
+          <span class="hi-value" id="my-hi">—</span>
+          <span class="hi-unit">體感°C</span>
+        </div>
+        <span class="hi-label" id="my-hi-label">—</span>
+        <div class="temp-rh-row">
+          <div class="metric-box"><div class="mv" id="my-temp">—</div><div class="ml">溫度 °C</div></div>
+          <div class="metric-box"><div class="mv" id="my-rh">—</div><div class="ml">濕度 %</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-label">熱指數分級</div>
+      <div class="legend-grid">
+        <div class="legend-row">
+          <div class="legend-dot" style="background:#3CFF00"></div>
+          <div style="flex:1">
+            <div class="legend-name" style="color:#3CFF00">注意</div>
+            <div class="legend-range">&lt; 32.2°C</div>
+          </div>
+          <div class="legend-badge" style="color:#3CFF00; font-weight:bold;">第一級</div>
+        </div>
+        <div class="legend-row">
+          <div class="legend-dot" style="background:#facc15"></div>
+          <div style="flex:1">
+            <div class="legend-name" style="color:#facc15">警戒</div>
+            <div class="legend-range">32.2 – 40.6°C</div>
+          </div>
+          <div class="legend-badge" style="color:#facc15; font-weight:bold;">第二級</div>
+        </div>
+        <div class="legend-row">
+          <div class="legend-dot" style="background:#f97316"></div>
+          <div style="flex:1">
+            <div class="legend-name" style="color:#f97316">高度警戒</div>
+            <div class="legend-range">40.6 – 54.4°C</div>
+          </div>
+          <div class="legend-badge" style="color:#f97316; font-weight:bold;">第三級</div>
+        </div>
+        <div class="legend-row">
+          <div class="legend-dot" style="background:#ef4444"></div>
+          <div style="flex:1">
+            <div class="legend-name" style="color:#ef4444">危險</div>
+            <div class="legend-range">&ge; 54.4°C</div>
+          </div>
+          <div class="legend-badge" style="color:#ef4444; font-weight:bold;">第四級</div>
+        </div>
+      </div>
+      <div class="legend-source">
+        依勞動部「高氣溫戶外作業熱危害預防指引」熱指數表雙軸插值計算。<br>
+        <span style="color:var(--accent); font-weight:bold; letter-spacing:0.02em;">※ 數值僅供參考，請依現場氣候並評估自身狀況為主。</span>
+      </div>
+    </div>
+
+    <div class="section-label" style="padding:10px 16px 0; display:flex; justify-content:space-between; align-items:center; flex-shrink:0;">
+      <span>各測站即時資料</span>
+      <div class="list-toggle">
+        <button id="toggle-all" class="active" onclick="setListMode('all')">全台</button>
+        <button id="toggle-map" onclick="setListMode('map')">範圍</button>
+      </div>
+    </div>
+    <div class="station-list" id="station-list">
+      <div style="color:var(--muted);font-size:11px;text-align:center;padding:20px;font-family:var(--mono)">載入中…</div>
+    </div>
+  </div>
+
+  <div id="map"></div>
+</div>
+
+<script>
+const _0xkey = atob('QTAzNkNFOUNENDhCLTBBNzktQjY0NC1FNjEzLUFBMERDODFELUFXQw==').split('').reverse().join('');
+const URL_AUTO = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001?Authorization=${_0xkey}&format=JSON`;
+const URL_BUREAU = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001?Authorization=${_0xkey}&format=JSON`;
+
+let map, stations = [], userMarker = null, userLatLng = null;
+let listMode = 'all'; // 'all' or 'map'
+let stationMarkers = {}, selectedId = null;
+
+// ══════════════════════════════════════════════
+//  勞動部表三：熱指數查找表
+//  行 = 溫度(°C)：26.7, 27.8, 28.9, 30.0, 31.1, 32.2, 33.3, 34.4,
+//                 35.6, 36.7, 37.8, 38.9, 40.0, 41.1, 42.2, 43.3
+//  欄 = 相對濕度(%)：40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100
+//  值 = 熱指數(°C)，null = 表中無資料（超出範圍）
+// ══════════════════════════════════════════════
+const HI_TEMPS = [26.7, 27.8, 28.9, 30.0, 31.1, 32.2, 33.3, 34.4,
+                  35.6, 36.7, 37.8, 38.9, 40.0, 41.1, 42.2, 43.3];
+const HI_RHS   = [40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100];
+
+// 每列對應一個溫度，每欄對應一個濕度
+// null 表示該格在原表為空白（灰色區域，超出適用範圍）
+const HI_TABLE = [
+//   40    45    50    55    60    65    70    75    80    85    90    95   100
+  [26.7, 26.7, 27.2, 27.2, 27.8, 27.8, 28.3, 28.9, 28.9, 29.4, 30.0, 30.0, 30.6], // 26.7
+  [27.2, 27.8, 28.3, 28.9, 28.9, 29.4, 30.0, 31.1, 31.7, 32.2, 32.8, 33.9, 35.0], // 27.8
+  [28.3, 28.9, 29.4, 30.0, 31.1, 31.7, 32.2, 33.3, 34.4, 35.6, 36.7, 37.8, 39.4], // 28.9
+  [29.4, 30.6, 31.1, 31.7, 32.8, 33.9, 35.0, 36.1, 37.8, 38.9, 40.6, 42.2, 44.4], // 30.0
+  [31.1, 31.7, 32.8, 33.9, 35.0, 36.7, 37.8, 39.4, 41.1, 43.3, 45.0, 47.2, 49.4], // 31.1
+  [32.8, 33.9, 35.0, 36.1, 37.8, 39.4, 40.6, 42.8, 45.0, 47.2, 50.0, 52.8, 55.6], // 32.2
+  [34.4, 35.6, 37.2, 38.3, 40.6, 42.2, 44.4, 46.7, 49.4, 52.2, 55.0, 58.3,  null], // 33.3
+  [36.1, 37.8, 39.4, 41.1, 43.3, 45.6, 48.3, 51.1, 53.9, 57.2,  null,  null,  null], // 34.4
+  [38.3, 40.0, 42.2, 44.4, 46.7, 49.4, 52.2, 55.6, 58.9,  null,  null,  null,  null], // 35.6
+  [40.6, 42.8, 45.0, 47.2, 50.6, 53.3, 56.7,  null,  null,  null,  null,  null,  null], // 36.7
+  [42.8, 45.6, 47.8, 51.1, 53.9, 57.8,  null,  null,  null,  null,  null,  null,  null], // 37.8
+  [45.6, 48.3, 51.1, 54.4, 58.3,  null,  null,  null,  null,  null,  null,  null,  null], // 38.9
+  [48.3, 51.1, 55.0, 58.3,  null,  null,  null,  null,  null,  null,  null,  null,  null], // 40.0
+  [51.1, 54.4, 58.3,  null,  null,  null,  null,  null,  null,  null,  null,  null,  null], // 41.1
+  [54.4, 58.3,  null,  null,  null,  null,  null,  null,  null,  null,  null,  null,  null], // 42.2
+  [57.8,  null,  null,  null,  null,  null,  null,  null,  null,  null,  null,  null,  null], // 43.3
+];
+
+/**
+ * 雙軸線性插值查表
+ * T: 氣溫(°C)，RH: 相對濕度(%)
+ * 若超出表格範圍或落在 null 區域，退而使用 Rothfusz 公式補估
+ */
+function lookupHI(T, RH) {
+  // 找溫度區間
+  let ti = HI_TEMPS.findIndex(t => t > T) - 1;
+  if (ti < 0) ti = 0;
+  if (ti >= HI_TEMPS.length - 1) ti = HI_TEMPS.length - 2;
+
+  // 找濕度區間（濕度欄 40–100，級距5）
+  const rhClamped = Math.max(40, Math.min(100, RH));
+  let ri = Math.floor((rhClamped - 40) / 5);
+  if (ri >= HI_RHS.length - 1) ri = HI_RHS.length - 2;
+
+  const t0 = HI_TEMPS[ti],   t1 = HI_TEMPS[ti+1];
+  const r0 = HI_RHS[ri],     r1 = HI_RHS[ri+1];
+  const v00 = HI_TABLE[ti][ri];
+  const v10 = HI_TABLE[ti+1][ri];
+  const v01 = HI_TABLE[ti][ri+1];
+  const v11 = HI_TABLE[ti+1][ri+1];
+
+  // 若四個角點都有值，做雙線性插值
+  if (v00 !== null && v10 !== null && v01 !== null && v11 !== null) {
+    const ft = (T - t0) / (t1 - t0);
+    const fr = (rhClamped - r0) / (r1 - r0);
+    return v00*(1-ft)*(1-fr) + v10*ft*(1-fr) + v01*(1-ft)*fr + v11*ft*fr;
+  }
+
+  // 部分 null：找最近非 null 格點值
+  const vals = [v00, v10, v01, v11].filter(v => v !== null);
+  if (vals.length > 0) return vals.reduce((a,b)=>a+b,0)/vals.length;
+
+  // 完全超出表格：Rothfusz 公式補估（高溫高濕極端情況）
+  return rothfusz(T, RH);
+}
+
+function rothfusz(T, RH) {
+  if (T < 27) return T;
+  const F = T*9/5+32;
+  const HI = -42.379 + 2.04901523*F + 10.14333127*RH
+    - 0.22475541*F*RH - 0.00683783*F*F - 0.05481717*RH*RH
+    + 0.00122874*F*F*RH + 0.00085282*F*RH*RH - 0.00000199*F*F*RH*RH;
+  return (HI-32)*5/9;
+}
+
+// 分級（勞動部四級）
+function getLevel(hi) {
+  if (isNaN(hi)) return { rank:0, badge:'無資料', name:'儀器異常', color:'#7dd3fc', bg:'#7dd3fc22' };
+  if (hi >= 54.4) return { rank:4, badge:'第四級', name:'危險',    color:'#ef4444', bg:'#ef444422' };
+  if (hi >= 40.6) return { rank:3, badge:'第三級', name:'高度警戒', color:'#f97316', bg:'#f9731622' };
+  if (hi >= 32.2) return { rank:2, badge:'第二級', name:'警戒',    color:'#facc15', bg:'#facc1522' };
+  return               { rank:1, badge:'第一級', name:'注意',    color:'#3CFF00', bg:'#3CFF0022' };
+}
+
+// 地圖初始化
+function initMap() {
+  map = L.map('map', { zoomControl:true }).setView([24.7, 121.15], 10);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution:'© OpenStreetMap contributors', maxZoom:18,
+  }).addTo(map);
+  map.on('moveend', () => { if(listMode === 'map') renderList(); });
+}
+
+// 標記圖示
+function createMarkerIcon(hi, size=36) {
+  const lv = getLevel(hi);
+  const label = isNaN(hi) ? 'X' : hi.toFixed(1);
+  const fontSize = isNaN(hi) ? size*0.5 : size*0.34;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size+16}" height="${size}">
+    <rect x="0" y="0" width="${size+16}" height="${size}" rx="${size/2}"
+      fill="${lv.color}22" stroke="${lv.color}" stroke-width="1.5"/>
+    <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle"
+      font-family="IBM Plex Mono,monospace" font-size="${fontSize}px"
+      font-weight="600" fill="${lv.color}">${label}</text>
+  </svg>`;
+  return L.divIcon({
+    html: svg, className:'',
+    iconSize:[size+16, size],
+    iconAnchor:[(size+16)/2, size/2],
+    popupAnchor:[0, -size/2],
+  });
+}
+
+function buildPopup(s) {
+  const lv = getLevel(s.hi);
+  const tStr = s.temp > -50 ? s.temp.toFixed(1) : '--';
+  const rStr = s.rh >= 0 ? s.rh.toFixed(0) : '--';
+  const hiStr = isNaN(s.hi) ? '--' : s.hi.toFixed(1) + '°C';
+
+  // 日極列（每個測站都顯示，尤其對故障站有用）
+  const hasHigh = !isNaN(s.dailyHigh) && s.dailyHigh > -50;
+  const hasLow  = !isNaN(s.dailyLow)  && s.dailyLow  > -50;
+  const dailyRow = (hasHigh || hasLow) ? `
+    <div style="margin-top:8px; padding:6px 10px; background:var(--bg); border-radius:4px; display:flex; justify-content:space-between; align-items:center;">
+      <div style="text-align:center; flex:1;">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:14px; color:#f87171;">${hasHigh ? s.dailyHigh.toFixed(1) : '--'}</div>
+        <div style="font-size:9px; color:var(--muted); margin-top:1px;">今日最高${s.dailyHighTime ? ' '+s.dailyHighTime : ''}</div>
+      </div>
+      <div style="width:1px; height:28px; background:var(--border);"></div>
+      <div style="text-align:center; flex:1;">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:14px; color:#60a5fa;">${hasLow ? s.dailyLow.toFixed(1) : '--'}</div>
+        <div style="font-size:9px; color:var(--muted); margin-top:1px;">今日最低${s.dailyLowTime ? ' '+s.dailyLowTime : ''}</div>
+      </div>
+    </div>` : '';
+
+  return `
+    <div class="popup-name">${s.name}
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5a6478"> ${s.id}</span>
+    </div>
+    <div class="popup-grid">
+      <div class="popup-cell">
+        <div class="popup-val" style="color:#fff">${tStr}</div>
+        <div class="popup-key">溫度 °C</div>
+      </div>
+      <div class="popup-cell">
+        <div class="popup-val" style="color:#60a5fa">${rStr}</div>
+        <div class="popup-key">相對濕度 %</div>
+      </div>
+    </div>
+    ${dailyRow}
+    <div class="popup-hi-row" style="background:${lv.bg};border:1px solid ${lv.color}55">
+      <div>
+        <div class="popup-hi-badge" style="color:${lv.color};font-weight:bold;">${lv.badge}</div>
+        <div class="popup-hi-name"  style="color:${lv.color}">${lv.name}</div>
+      </div>
+      <div>
+        <div class="popup-hi-val" style="color:${lv.color}">${hiStr}</div>
+        <div style="font-size:9px;color:#5a6478;text-align:right">熱指數</div>
+      </div>
+    </div>
+    <div style="font-size:9px;color:#5a6478;margin-top:6px;font-family:'IBM Plex Mono',monospace">
+      觀測時間：${s.time}
+    </div>`;
+}
+
+function setListMode(mode) {
+  listMode = mode;
+  document.getElementById('toggle-all').classList.toggle('active', mode === 'all');
+  document.getElementById('toggle-map').classList.toggle('active', mode === 'map');
+  renderList();
+}
+
+function renderStations() {
+  stations.forEach(s => {
+    if (stationMarkers[s.id]) {
+      stationMarkers[s.id].setIcon(createMarkerIcon(s.hi));
+      stationMarkers[s.id].getPopup().setContent(buildPopup(s));
+    } else {
+      const m = L.marker([s.lat, s.lng], { icon:createMarkerIcon(s.hi) })
+        .addTo(map)
+        .bindPopup(buildPopup(s), { maxWidth:240 });
+      m.on('click', () => selectStation(s.id));
+      stationMarkers[s.id] = m;
+    }
+  });
+  renderList();
+}
+
+function renderList() {
+  let displayStations = stations;
+  if (listMode === 'map') {
+    const bounds = map.getBounds();
+    displayStations = stations.filter(s => bounds.contains([s.lat, s.lng]));
+  }
+  const sorted = [...displayStations].sort((a,b) => {
+    if (isNaN(a.hi) && isNaN(b.hi)) return 0;
+    if (isNaN(a.hi)) return 1;
+    if (isNaN(b.hi)) return -1;
+    return b.hi - a.hi;
+  });
+  const listHtml = sorted.map(s => {
+    const lv = getLevel(s.hi);
+    const tStr = s.temp > -50 ? s.temp.toFixed(1) + '°C' : '--';
+    const rStr = s.rh >= 0 ? s.rh.toFixed(0) + '%RH' : '--';
+    return `
+      <div class="station-item ${selectedId===s.id?'active':''}" id="si-${s.id}"
+           onclick="selectStation('${s.id}')">
+        <div class="station-dot" style="background:${lv.color}"></div>
+        <div style="flex:1;min-width:0">
+          <div class="station-name">${s.name}</div>
+          <div class="station-sub">${tStr} ／ ${rStr}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="station-hi" style="color:${lv.color}">${isNaN(s.hi) ? '--' : s.hi.toFixed(1)}</div>
+          <div style="font-size:9px;color:${lv.color};font-weight:bold;font-family:'IBM Plex Mono',monospace">${lv.badge}</div>
+        </div>
+      </div>`;
+  }).join('');
+  
+  document.getElementById('station-list').innerHTML = listHtml || '<div style="color:var(--muted);font-size:11px;text-align:center;padding:20px;font-family:var(--mono)">此範圍內無測站</div>';
+}
+
+function selectStation(id) {
+  selectedId = id;
+  const s = stations.find(x => x.id === id);
+  if (!s) return;
+  map.setView([s.lat, s.lng], 13, { animate:true });
+  stationMarkers[id]?.openPopup();
+  document.querySelectorAll('.station-item').forEach(el => el.classList.remove('active'));
+  const el = document.getElementById(`si-${id}`);
+  if (el) { el.classList.add('active'); el.scrollIntoView({ behavior:'smooth', block:'nearest' }); }
+}
+
+// 距離計算
+function dist(lat1,lng1,lat2,lng2) {
+  const R=6371, dLat=(lat2-lat1)*Math.PI/180, dLng=(lng2-lng1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function updateMyLocation(lat, lng) {
+  userLatLng = { lat, lng };
+  if (userMarker) userMarker.remove();
+  const dotIcon = L.divIcon({ html:'<div class="user-dot"></div>', className:'',
+                              iconSize:[16,16], iconAnchor:[8,8] });
+  userMarker = L.marker([lat,lng], { icon:dotIcon, zIndexOffset:1000 })
+    .addTo(map).bindTooltip('您的位置', { permanent:false });
+
+  if (!stations.length) return;
+  let nearest=null, minD=Infinity;
+  stations.forEach(s => { const d=dist(lat,lng,s.lat,s.lng); if(d<minD){minD=d;nearest=s;} });
+
+  if (nearest) {
+    const lv = getLevel(nearest.hi);
+    document.getElementById('my-loc-name').textContent = `最近測站：${nearest.name}`;
+    document.getElementById('my-loc-meta').textContent = `距離 ${minD.toFixed(1)} km`;
+    document.getElementById('my-hi').textContent = isNaN(nearest.hi) ? '--' : nearest.hi.toFixed(1);
+    document.getElementById('my-hi').style.color = lv.color;
+    const lb = document.getElementById('my-hi-label');
+    lb.textContent = `${lv.badge}｜${lv.name}`;
+    lb.style.background = lv.bg; lb.style.color = lv.color;
+    document.getElementById('my-temp').textContent = nearest.temp > -50 ? nearest.temp.toFixed(1) : '--';
+    document.getElementById('my-rh').textContent   = nearest.rh >= 0 ? nearest.rh.toFixed(0) : '--';
+    document.getElementById('my-location-card').classList.remove('locating');
+  }
+}
+
+// 取得 CWA 資料
+async function fetchData() {
+  const btn = document.getElementById('refresh-btn');
+  btn.classList.add('loading'); btn.textContent = '載入中…';
+
+  try {
+    // 併發拉取 自動氣象站(O-A0001-001) 與 局屬氣象站(O-A0003-001) 的資料，以達到最高測站密度
+    const [resAuto, resBureau] = await Promise.all([fetch(URL_AUTO), fetch(URL_BUREAU)]);
+    const jsonAuto = await resAuto.json();
+    const jsonBureau = await resBureau.json();
+    
+    const rawAuto = jsonAuto?.records?.Station || [];
+    const rawBureau = jsonBureau?.records?.Station || [];
+    
+    // 合併資料並確保 StationId 不重複。若有重複，優先取觀測時間較新者
+    const combinedRaw = [...rawAuto, ...rawBureau];
+    const stationMap = new Map();
+    combinedRaw.forEach(s => {
+      const existing = stationMap.get(s.StationId);
+      if (!existing) {
+        stationMap.set(s.StationId, s);
+      } else {
+        const tNew = s.ObsTime?.DateTime || "";
+        const tOld = existing.ObsTime?.DateTime || "";
+        if (tNew > tOld) {
+          stationMap.set(s.StationId, s);
+        }
+      }
+    });
+    const uniqueRaw = Array.from(stationMap.values());
+
+    stations = uniqueRaw.map(s => {
+      const temp = parseFloat(s.WeatherElement?.AirTemperature ?? 'NaN');
+      const rh   = parseFloat(s.WeatherElement?.RelativeHumidity ?? 'NaN');
+      const lat  = parseFloat(s.GeoInfo?.Coordinates?.[0]?.StationLatitude  ?? 0);
+      const lng  = parseFloat(s.GeoInfo?.Coordinates?.[0]?.StationLongitude ?? 0);
+      
+      // 判斷是否為無效值（如 -99.0 或 -99），若無效則保留測站但 hi 設為 NaN
+      const isValid = !isNaN(temp) && !isNaN(rh) && temp > -50 && rh >= 0;
+      const hi   = isValid ? lookupHI(temp, rh) : NaN;
+      
+      // 擷取日極值（即使目前感測器故障，今日最高最低溫度仍可提供參考）
+      const de = s.WeatherElement?.DailyExtreme;
+      const dailyHigh = parseFloat(de?.DailyHigh?.TemperatureInfo?.AirTemperature ?? 'NaN');
+      const dailyLow  = parseFloat(de?.DailyLow?.TemperatureInfo?.AirTemperature  ?? 'NaN');
+      const dailyHighTime = de?.DailyHigh?.TemperatureInfo?.Occurred_at?.DateTime?.slice(11,16) || '';
+      const dailyLowTime  = de?.DailyLow?.TemperatureInfo?.Occurred_at?.DateTime?.slice(11,16) || '';
+
+      return { id:s.StationId, name:s.StationName, temp, rh, lat, lng, hi,
+               dailyHigh, dailyLow, dailyHighTime, dailyLowTime,
+               time: s.ObsTime?.DateTime?.slice(11,16) || '—' };
+    }).filter(s => s.lat && s.lng);
+
+    renderStations();
+    if (userLatLng) updateMyLocation(userLatLng.lat, userLatLng.lng);
+    showToast(`已更新 ${stations.length} 個測站`);
+  } catch(e) {
+    showToast('資料取得失敗（請確認網路或以本機瀏覽器開啟）');
+    console.error(e);
+  } finally {
+    btn.classList.remove('loading'); btn.textContent = '↻ 更新';
+    document.getElementById('loading').classList.add('done');
+  }
+}
+
+function getLocation() {
+  if (!navigator.geolocation) {
+    document.getElementById('my-loc-name').textContent = '瀏覽器不支援定位'; return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      map.setView([pos.coords.latitude, pos.coords.longitude], 11, { animate: true });
+      updateMyLocation(pos.coords.latitude, pos.coords.longitude);
+    },
+    ()  => {
+      document.getElementById('my-loc-name').textContent = '定位失敗（請允許位置權限）';
+      document.getElementById('my-loc-meta').textContent = '可點選地圖測站查看';
+    },
+    { enableHighAccuracy:true, timeout:10000 }
+  );
+}
+
+function updateClock() {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleString('zh-TW',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+setInterval(updateClock, 1000); updateClock();
+setInterval(fetchData, 10*60*1000);
+
+initMap();
+fetchData();
+getLocation();
+</script>
+</body>
+</html>
