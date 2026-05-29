@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
@@ -97,6 +97,11 @@
   .list-toggle button { background:transparent; border:none; color:var(--muted); font-size:10px; padding:4px 8px; cursor:pointer; font-family:var(--sans); }
   .list-toggle button.active { background:var(--panel); color:var(--accent); font-weight:700; }
 
+  /* Cool spot layer toggle */
+  .layer-btn { background:var(--panel); border:1px solid var(--border); color:var(--muted); padding:5px 12px; border-radius:4px; cursor:pointer; font-size:11px; font-family:var(--mono); transition:all .2s; white-space:nowrap; }
+  .layer-btn.active { border-color:#60a5fa; color:#60a5fa; background:#60a5fa18; }
+  .layer-btn.water.active { border-color:#34d399; color:#34d399; background:#34d39918; }
+
   /* Map */
   #map { flex:1; background:var(--bg); }
   .leaflet-container { background:#111318; }
@@ -168,6 +173,8 @@
   </div>
   <div class="header-spacer"></div>
   <span id="clock"></span>
+  <button id="btn-cool" class="layer-btn" onclick="toggleCoolLayer()">🏢 涼適點</button>
+  <button id="btn-water" class="layer-btn water" onclick="toggleWaterLayer()">💧 飲水機</button>
   <button id="refresh-btn" onclick="fetchData()">↻ 更新</button>
 </header>
 
@@ -252,6 +259,11 @@
 const _0xkey = atob('QTAzNkNFOUNENDhCLTBBNzktQjY0NC1FNjEzLUFBMERDODFELUFXQw==').split('').reverse().join('');
 const URL_AUTO = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001?Authorization=${_0xkey}&format=JSON`;
 const URL_BUREAU = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001?Authorization=${_0xkey}&format=JSON`;
+const URL_COOL = 'https://taiwancoolmap.moenv.gov.tw/CoolMap/Service/ajax_AllPoint';
+const URL_WATER = 'https://taiwancoolmap.moenv.gov.tw/CoolMap/Service/ajax_WaterDispenser';
+
+let coolLayerGroup = null, waterLayerGroup = null;
+let coolLayerOn = false, waterLayerOn = false;
 
 let map, stations = [], userMarker = null, userLatLng = null;
 let listMode = 'all'; // 'all' or 'map'
@@ -354,6 +366,84 @@ function initMap() {
   }).addTo(map);
   map.on('moveend', () => { if(listMode === 'map') renderList(); });
 }
+
+// ── 涼適點圖層 ────────────────────────────────────────────
+function makeCoolIcon(emoji) {
+  return L.divIcon({
+    html: `<div style="font-size:18px;line-height:1;filter:drop-shadow(0 1px 2px #000a);">${emoji}</div>`,
+    className: '', iconSize:[22,22], iconAnchor:[11,11]
+  });
+}
+
+async function toggleCoolLayer() {
+  const btn = document.getElementById('btn-cool');
+  if (coolLayerOn) {
+    if (coolLayerGroup) map.removeLayer(coolLayerGroup);
+    coolLayerOn = false; btn.classList.remove('active');
+    return;
+  }
+  btn.textContent = '🏢 載入中…'; btn.disabled = true;
+  try {
+    if (!coolLayerGroup) {
+      const res = await fetch(URL_COOL, { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
+      const data = await res.json();
+      coolLayerGroup = L.layerGroup();
+      data.forEach(p => {
+        if (!p.Latitude || !p.Longitude) return;
+        const emoji = p.CoolingType === '室內涼爽點' ? '🏢' : '☂️';
+        const attrs = [
+          p.AirConditioning ? '❄️ 冷氣' : '',
+          p.WaterDispenser  ? '💧 飲水' : '',
+          p.Restroom        ? '🚻 廁所' : '',
+          p.IsAccessible    ? '♿ 無障礙' : '',
+          p.Seats           ? '🪑 座椅' : '',
+        ].filter(Boolean).join('  ');
+        const popup = `<div style="font-size:12px;font-weight:700;color:#fff;margin-bottom:4px">${p.PlaceName}</div>
+          <div style="font-size:10px;color:#94a3b8;margin-bottom:4px">${p.CoolingType || ''} · ${p.District || ''}${p.City || ''}</div>
+          ${p.Address ? `<div style="font-size:10px;color:#94a3b8;margin-bottom:4px">📍 ${p.Address}</div>` : ''}
+          ${p.OpeningHours ? `<div style="font-size:10px;color:#94a3b8;margin-bottom:4px">🕐 ${p.OpeningHours}</div>` : ''}
+          ${attrs ? `<div style="font-size:10px;color:#60a5fa;margin-top:4px">${attrs}</div>` : ''}`;
+        L.marker([p.Latitude, p.Longitude], { icon: makeCoolIcon(emoji) })
+          .bindPopup(popup, { maxWidth:220, className:'custom-popup' })
+          .addTo(coolLayerGroup);
+      });
+    }
+    coolLayerGroup.addTo(map);
+    coolLayerOn = true; btn.classList.add('active');
+  } catch(e) { showToast('涼適點載入失敗'); }
+  btn.textContent = '🏢 涼適點'; btn.disabled = false;
+}
+
+async function toggleWaterLayer() {
+  const btn = document.getElementById('btn-water');
+  if (waterLayerOn) {
+    if (waterLayerGroup) map.removeLayer(waterLayerGroup);
+    waterLayerOn = false; btn.classList.remove('active');
+    return;
+  }
+  btn.textContent = '💧 載入中…'; btn.disabled = true;
+  try {
+    if (!waterLayerGroup) {
+      const res = await fetch(URL_WATER, { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
+      const data = await res.json();
+      waterLayerGroup = L.layerGroup();
+      data.forEach(p => {
+        if (!p.Latitude || !p.Longitude) return;
+        const popup = `<div style="font-size:12px;font-weight:700;color:#fff;margin-bottom:4px">${p.Name || '公共飲水機'}</div>
+          <div style="font-size:10px;color:#94a3b8;margin-bottom:4px">${p.PlaceType || ''} · ${p.County || ''}</div>
+          ${p.Address ? `<div style="font-size:10px;color:#94a3b8">📍 ${p.Address}</div>` : ''}
+          ${p.Remark ? `<div style="font-size:10px;color:#34d399;margin-top:4px">${p.Remark}</div>` : ''}`;
+        L.marker([p.Latitude, p.Longitude], { icon: makeCoolIcon('💧') })
+          .bindPopup(popup, { maxWidth:200, className:'custom-popup' })
+          .addTo(waterLayerGroup);
+      });
+    }
+    waterLayerGroup.addTo(map);
+    waterLayerOn = true; btn.classList.add('active');
+  } catch(e) { showToast('飲水機資料載入失敗'); }
+  btn.textContent = '💧 飲水機'; btn.disabled = false;
+}
+
 
 // 標記圖示
 function createMarkerIcon(hi, size=36) {
